@@ -6,7 +6,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"time"
@@ -14,11 +16,16 @@ import (
 	"github.com/0xcafed00d/joystick"
 )
 
-func readJoystick(js joystick.Joystick) {
+var (
+	lastAxis  [10]int
+	lastMoved = time.Now()
+)
+
+func readJoystick(js joystick.Joystick) error {
 	jinfo, err := js.Read()
 	if err != nil {
 		fmt.Println("Error: " + err.Error())
-		return
+		return nil
 	}
 
 	fmt.Println("Buttons:")
@@ -32,10 +39,20 @@ func readJoystick(js joystick.Joystick) {
 
 	fmt.Println()
 	for axis := 0; axis < js.AxisCount(); axis++ {
-		fmt.Printf("Axis %2d Value: %7d\n", axis, jinfo.AxisData[axis])
+		if lastAxis[axis] != jinfo.AxisData[axis] {
+			lastMoved = time.Now()
+			fmt.Printf("Axis %2d Value: %7d *\n", axis, jinfo.AxisData[axis])
+			lastAxis[axis] = jinfo.AxisData[axis]
+		} else {
+			fmt.Printf("Axis %2d Value: %7d\n", axis, jinfo.AxisData[axis])
+		}
 	}
-
-	return
+	if time.Since(lastMoved) > 1*time.Minute {
+		fmt.Printf("Disconnected: %v\n", time.Since(lastMoved))
+		return errors.New("Joystick disconnected")
+	}
+	fmt.Printf("Last change: %v\n", time.Since(lastMoved))
+	return nil
 }
 
 func main() {
@@ -60,6 +77,8 @@ func main() {
 
 	for range ticker.C {
 		fmt.Printf("Joystick Name: %s Axis Count: %d Button Count: %d\n", js.Name(), js.AxisCount(), js.ButtonCount())
-		readJoystick(js)
+		if err := readJoystick(js); err != nil {
+			log.Fatal(err)
+		}
 	}
 }
